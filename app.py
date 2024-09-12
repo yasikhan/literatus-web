@@ -222,7 +222,7 @@ def search_books():
 @app.route('/add_book', methods=['POST'])
 @login_required
 def add_book():
-    print("Received form data:", request.form)
+    #print("Received form data:", request.form)
     title = request.form.get('title')
     author = request.form.get('author')
     sentiment = request.form.get('sentiment')
