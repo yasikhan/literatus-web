@@ -55,7 +55,7 @@ class Book(db.Model):
     sentiment = db.Column(db.String(20), nullable=False)
     position = db.Column(db.Integer, nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    google_books_url = db.Column(db.Text, nullable=True)  # New field for Google Books URL
+    google_books_url = db.Column(db.String(256), nullable=True)  # New field for Google Books URL
 
 
 
