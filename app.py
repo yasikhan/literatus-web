@@ -100,12 +100,12 @@ def load_user(user_id):
 def home():
     if current_user.is_authenticated:
         community_favorites = db.session.query(
-            Book.title, Book.author, Book.cover_url, Book.google_books_url,
+            Book.title, Book.author,
             func.count(Book.id).label('fav_count')
         ).filter(
             Book.sentiment == 'beloved', Book.status == 'read'
         ).group_by(
-            Book.title, Book.author, Book.cover_url, Book.google_books_url
+            Book.title, Book.author
         ).order_by(
             func.count(Book.id).desc()
         ).limit(8).all()
