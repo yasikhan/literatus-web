@@ -8,6 +8,7 @@
 
     <div class="flex justify-center space-x-16 mb-8">
         <form action="{{ url_for('rerank_book') }}" method="post" class="w-1/2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <input type="hidden" name="compared_book_id" value="{{ compared_book.id }}">
             <input type="hidden" name="preference" value="1">
             <button type="submit" class="w-full bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition duration-300 text-left">
@@ -17,6 +18,7 @@
         </form>
 
         <form action="{{ url_for('rerank_book') }}" method="post" class="w-1/2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <input type="hidden" name="compared_book_id" value="{{ compared_book.id }}">
             <input type="hidden" name="preference" value="0">
             <button type="submit" class="w-full bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition duration-300 text-left">

@@ -6,6 +6,7 @@
 <div class="max-w-md mx-auto">
     <h1 class="text-3xl font-bold mb-6 text-center text-maroon font-title">Login to Literatus</h1>
     <form method="POST" class="space-y-4">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <div>
             <label for="username" class="block mb-1 text-maroon">Username:</label>
             <input type="text" id="username" name="username" required class="w-full p-2 border rounded bg-white">

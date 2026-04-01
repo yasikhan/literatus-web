@@ -14,6 +14,7 @@
             <ul id="search-results" class="mb-4"></ul>
             <div id="manual-entry" style="display: none;">
                 <form action="{{ url_for('add_book') }}" method="post" class="space-y-4">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                     <input type="text" id="book-title" name="title" required placeholder="Book Title" class="w-full p-2 border rounded bg-white">
                     <input type="text" id="book-author" name="author" required placeholder="Author" class="w-full p-2 border rounded bg-white">
                     <input type="text" id="google_books_url" name="google_books_url" required placeholder="" class="w-full p-2 border rounded bg-white">
@@ -50,10 +51,12 @@
                         results.empty();
                         if (data.length > 0) {
                             searchFailed = false;
+                            var csrfToken = $('meta[name="csrf-token"]').attr('content');
                             data.forEach(function(book) {
                                 results.append('<li class="cursor-pointer hover:bg-gray-100 p-2">' +
                                                book.title + ' by ' + book.author +
                                                '<form action="{{ url_for('add_book') }}" method="post" class="inline ml-2">' +
+                                               '<input type="hidden" name="csrf_token" value="' + csrfToken + '">' +
                                                '<input type="hidden" name="title" value="' + book.title + '">' +
                                                '<input type="hidden" name="author" value="' + book.author + '">' +
                                                '<input type="hidden" name="google_books_url" value="' + (book.google_books_url || '') + '">' +

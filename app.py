@@ -1,8 +1,11 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from flask_wtf.csrf import CSRFProtect
 from werkzeug.security import generate_password_hash, check_password_hash
+from urllib.parse import urlparse
 import requests
+import secrets
 import os
 from flask_migrate import Migrate
 
@@ -14,9 +17,10 @@ if uri and uri.startswith("postgres://"):
 
 app.config['SQLALCHEMY_DATABASE_URI'] = uri or 'sqlite:///literatus.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'hannah_arendt_is_great')
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
 
 db = SQLAlchemy(app)
+csrf = CSRFProtect(app)
 migrate = Migrate(app, db)
 
 login_manager = LoginManager(app)
@@ -55,7 +59,7 @@ class Book(db.Model):
     sentiment = db.Column(db.String(20), nullable=False)
     position = db.Column(db.Integer, nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    google_books_url = db.Column(db.String(256), nullable=True)  # New field for Google Books URL
+    google_books_url = db.Column(db.Text, nullable=True)  # New field for Google Books URL
 
 
 
@@ -74,6 +78,14 @@ def register():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
+
+        if not username or len(username) < 3 or len(username) > 80:
+            flash('Username must be between 3 and 80 characters.')
+            return redirect(url_for('register'))
+
+        if len(password) < 8:
+            flash('Password must be at least 8 characters.')
+            return redirect(url_for('register'))
 
         user = User.query.filter_by(username=username).first()
         if user:
@@ -110,42 +122,6 @@ def logout():
     logout_user()
     return redirect(url_for('home'))
 
-
-# @app.route('/profile')
-# @login_required
-# def profile():
-#     beloved_books = Book.query.filter_by(user_id=current_user.id, sentiment='beloved').order_by(Book.position).all()
-#     tolerated_books = Book.query.filter_by(user_id=current_user.id, sentiment='tolerated').order_by(Book.position).all()
-#     disliked_books = Book.query.filter_by(user_id=current_user.id, sentiment='disliked').order_by(Book.position).all()
-#
-#     all_books = beloved_books + tolerated_books + disliked_books
-#     total_books = len(all_books)
-#
-#     for i, book in enumerate(all_books):
-#         if book.sentiment == 'beloved':
-#             base = 7.5
-#             max_rating = 10
-#         elif book.sentiment == 'tolerated':
-#             base = 4.5
-#             max_rating = 7
-#         else:  # disliked
-#             base = 1
-#             max_rating = 4
-#
-#         category_books = beloved_books if book in beloved_books else \
-#             tolerated_books if book in tolerated_books else \
-#                 disliked_books
-#         category_position = category_books.index(book)
-#         category_total = len(category_books)
-#
-#         book.rating = base + ((max_rating - base) * (1 - (category_position / (category_total - 1 or 1))))
-#         book.rating = round(book.rating, 1)  # Round to one decimal place
-#         book.global_position = i + 1
-#
-#     return render_template('profile.html', user=current_user,
-#                            beloved_books=beloved_books,
-#                            tolerated_books=tolerated_books,
-#                            disliked_books=disliked_books)
 
 @app.route('/profile/<username>')
 @login_required
@@ -222,16 +198,24 @@ def search_books():
 @app.route('/add_book', methods=['POST'])
 @login_required
 def add_book():
-    #print("Received form data:", request.form)
-    title = request.form.get('title')
-    author = request.form.get('author')
+    title = request.form.get('title', '').strip()
+    author = request.form.get('author', '').strip()
     sentiment = request.form.get('sentiment')
-    google_books_url = request.form.get('google_books_url')  # New field
+    google_books_url = request.form.get('google_books_url', '').strip()
 
     if not all([title, author, sentiment]):
         missing_fields = [field for field in ['title', 'author', 'sentiment'] if not request.form.get(field)]
         flash(f"Error: Missing required fields: {', '.join(missing_fields)}")
-        return redirect(url_for('search_books'))
+        return redirect(url_for('home'))
+
+    if len(title) > 200 or len(author) > 100:
+        flash('Title or author name is too long.')
+        return redirect(url_for('home'))
+
+    if google_books_url:
+        parsed = urlparse(google_books_url)
+        if parsed.scheme not in ('http', 'https') or 'google' not in parsed.netloc:
+            google_books_url = None
 
     new_book = Book(
         title=title,
@@ -433,48 +417,6 @@ def insert_book(new_book, insert_position):
 
     new_book.position = insert_position
     db.session.commit()
-
-
-def update_ratings(user_id, sentiment):
-    books = Book.query.filter_by(user_id=user_id, sentiment=sentiment).order_by(Book.position).all()
-    total_books = len(books)
-    for index, book in enumerate(books, start=1):
-        book.rating = 10 - ((index - 1) * 9 / (total_books - 1)) if total_books > 1 else 10
-    db.session.commit()
-
-
-def update_category_ratings(books):
-    if not books:
-        return
-    min_rating = min(book.rating or 5 for book in books)
-    max_rating = max(book.rating or 5 for book in books)
-    for book in books:
-        if min_rating != max_rating:
-            normalized_rating = (book.rating - min_rating) / (max_rating - min_rating)
-            if book.sentiment == 'beloved':
-                book.rating = 7 + (normalized_rating * 3)
-            elif book.sentiment == 'tolerated':
-                book.rating = 4 + (normalized_rating * 3)
-            else:  # disliked
-                book.rating = 1 + (normalized_rating * 3)
-        else:
-            if book.sentiment == 'beloved':
-                book.rating = 8.5
-            elif book.sentiment == 'tolerated':
-                book.rating = 5.5
-            else:  # disliked
-                book.rating = 2.5
-
-
-def binary_search_insert(books, new_book):
-    left, right = 0, len(books) - 1
-    while left <= right:
-        mid = (left + right) // 2
-        if books[mid].rating < new_book.rating:
-            right = mid - 1
-        else:
-            left = mid + 1
-    return left
 
 
 if __name__ == '__main__':
