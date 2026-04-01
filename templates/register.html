@@ -1,22 +1,22 @@
 {% extends "layout.html" %}
 
-{% block title %}Register - Literatus{% endblock %}
+{% block title %}Register — Literatus{% endblock %}
 
 {% block content %}
-<div class="max-w-md mx-auto">
-    <h1 class="text-3xl font-bold mb-6 text-center text-maroon font-title">Register for Literatus</h1>
-    <form method="POST" class="space-y-4">
+<div class="notebook-container">
+    <h1>register</h1>
+    <form method="POST">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-        <div>
-            <label for="username" class="block mb-1 text-maroon">Username:</label>
-            <input type="text" id="username" name="username" required minlength="3" maxlength="80" class="w-full p-2 border rounded bg-white">
+        <div class="form-group">
+            <label for="username" class="form-label">username</label>
+            <input type="text" id="username" name="username" required minlength="3" maxlength="80" class="form-input">
         </div>
-        <div>
-            <label for="password" class="block mb-1 text-maroon">Password:</label>
-            <input type="password" id="password" name="password" required minlength="8" class="w-full p-2 border rounded bg-white">
+        <div class="form-group">
+            <label for="password" class="form-label">password (8+ characters)</label>
+            <input type="password" id="password" name="password" required minlength="8" class="form-input">
         </div>
-        <button type="submit" class="w-full bg-maroon text-white p-2 rounded hover:bg-maroon-dark">Register</button>
+        <button type="submit" class="form-submit">join</button>
     </form>
-    <p class="mt-4 text-center text-maroon">Already have an account? <a href="{{ url_for('login') }}" class="text-maroon hover:underline">Login here</a></p>
+    <p class="form-link">already have an account? <a href="{{ url_for('login') }}">login here</a></p>
 </div>
 {% endblock %}

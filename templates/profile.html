@@ -1,119 +1,94 @@
 {% extends "layout.html" %}
 
-{% block title %}{{ user.username.capitalize() }}'s Profile - Literatus{% endblock %}
-
-{% block extra_css %}
-<style>
-    .rating-circle {
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: bold;
-        color: white;
-    }
-    .beloved { background-color: #4CAF50; }
-    .tolerated { background-color: #FFC107; }
-    .disliked { background-color: #F44336; }
-    .category-header {
-        border-bottom: 2px solid #800000;
-        padding-bottom: 0.5rem;
-        margin-bottom: 1rem;
-        display: flex;
-        align-items: center;
-    }
-
-    .delete-button {
-        color: #ef4444;
-    }
-    .delete-button:hover {
-        color: #dc2626;
-    }
-    .rerank-button {
-        background-color: #71716F;
-        color: white;
-    }
-    .rerank-button:hover {
-        background-color: #600000;
-    }
-    .category-icon {
-        margin-right: 0.5rem;
-    }
-</style>
-{% endblock %}
+{% block title %}{{ user.username.capitalize() }}'s Library — Literatus{% endblock %}
 
 {% block content %}
-<div class="max-w-4xl mx-auto">
-    <div class="flex justify-between items-center mb-8">
-        <h1 class="text-3xl font-bold text-maroon font-title">{{ user.username.capitalize() }}'s Library</h1>
+<div style="max-width: 800px; margin: 0 auto;">
+    <div class="profile-header">
+        <div class="profile-avatar">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                <line x1="8" y1="7" x2="16" y2="7"/>
+                <line x1="8" y1="11" x2="13" y2="11"/>
+            </svg>
+        </div>
+        <div>
+            <h1 class="profile-name">{{ user.username.capitalize() }}</h1>
+            {% if beloved_books %}
+                <p class="profile-favorite">current favorite: {{ beloved_books[0].title }} by {{ beloved_books[0].author }}</p>
+            {% else %}
+                <p class="profile-favorite">no favorite book yet</p>
+            {% endif %}
+        </div>
         {% if is_own_profile %}
-        <a href="{{ url_for('home') }}" class="bg-maroon text-white px-4 py-2 rounded-lg hover:bg-maroon-dark transition duration-300">Add New Book</a>
+        <div class="profile-actions">
+            <a href="{{ url_for('home') }}" class="add-book-link">+ add book</a>
+        </div>
         {% endif %}
     </div>
 
-    <div class="bg-white p-6 rounded-lg shadow-md mb-8 flex items-center">
-        <img src="https://api.dicebear.com/6.x/initials/svg?seed={{ user.username }}" alt="{{ user.username }}" class="w-20 h-20 rounded-full mr-6">
-        <div>
-            <h2 class="text-2xl font-semibold text-maroon font-title">{{ user.username.capitalize() }}</h2>
-            {% if beloved_books %}
-                <p class="text-gray-600">Current favorite: {{ beloved_books[0].title }} by {{ beloved_books[0].author }}</p>
-            {% else %}
-                <p class="text-gray-600">No favorite book yet</p>
-            {% endif %}
-        </div>
-    </div>
-
-    {% for category, books, color, icon in [
-        ('Beloved Books', user.beloved_books, 'beloved', '❤️'),
-        ('Tolerated Books', user.tolerated_books, 'tolerated', '😐'),
-        ('Disliked Books', user.disliked_books, 'disliked', '👎')
+    {% for category, books, color in [
+        ('Beloved', beloved_books, 'beloved'),
+        ('Tolerated', tolerated_books, 'tolerated'),
+        ('Disliked', disliked_books, 'disliked')
     ] %}
-        <section class="mb-8">
-            <h2 class="text-2xl font-semibold text-maroon font-title category-header">
-                <span class="category-icon">{{ icon }}</span>{{ category }}
+        <section class="category-section">
+            <h2 class="category-header">{{ category }}
             </h2>
             {% if books %}
-                <ul class="space-y-4">
+                <ul class="book-list">
                 {% for book in books|sort(attribute='rating', reverse=True) %}
-                    <li class="book-item bg-white p-4 rounded-lg shadow-md mb-4 flex items-center justify-between">
-                        <div class="flex-grow flex items-center">
-                            <span class="rating-circle {{ color }} mr-4 flex-shrink-0">
-                                {{ "%.1f"|format(book.rating) }}
-                            </span>
-                            <div class="book-info">
+                    <li class="book-item fade-in">
+                        <span class="rating-circle rating-{{ color }}">
+                            {{ "%.1f"|format(book.rating) }}
+                        </span>
+                        <div class="book-info">
+                            <div class="book-info-title">
                                 {% if book.google_books_url %}
-                                    <a href="{{ book.google_books_url }}" target="_blank" class="font-semibold text-maroon font-title hover:underline">{{ book.title }}</a>
+                                    <a href="{{ book.google_books_url }}" target="_blank">{{ book.title }}</a>
                                 {% else %}
-                                    <h3 class="font-semibold text-maroon font-title">{{ book.title }}</h3>
+                                    {{ book.title }}
                                 {% endif %}
-                                <p>by {{ book.author }}</p>
                             </div>
+                            <div class="book-info-author">{{ book.author }}</div>
                         </div>
-                        <div class="flex items-center space-x-2">
-                            <span class="text-gray-500 ml-2">#{{ book.global_position }}</span>
-                            {% if is_own_profile %}
-                            <form action="{{ url_for('delete_book', book_id=book.id) }}" method="POST" class="display:inline">
+                        <span class="book-position">#{{ book.global_position }}</span>
+                        {% if is_own_profile %}
+                        <div class="book-actions">
+                            <form action="{{ url_for('delete_book', book_id=book.id) }}" method="POST" style="display:inline">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                <button type="submit" class="text-red-500 hover:text-red-700" onclick="return confirm('Are you sure you want to delete this book?');">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                         <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                                <button type="submit" class="btn-delete" onclick="return confirm('Delete this book?');">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/>
                                     </svg>
                                 </button>
                             </form>
-                            <a href="{{ url_for('initiate_rerank', book_id=book.id) }}" class="action-button rerank-button bg-maroon text-white px-2 py-1 rounded hover:bg-maroon-dark transition duration-300">
-                                Rerank
-                            </a>
-                            {% endif %}
+                            <a href="{{ url_for('initiate_rerank', book_id=book.id) }}" class="btn-rerank">rerank</a>
                         </div>
+                        {% endif %}
                     </li>
                 {% endfor %}
                 </ul>
             {% else %}
-                <p class="italic text-gray-500">No books in this category yet.</p>
+                <p class="empty-category">no books here yet</p>
             {% endif %}
         </section>
     {% endfor %}
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var observer = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('visible');
+            }
+        });
+    }, { threshold: 0.1 });
+    document.querySelectorAll('.fade-in').forEach(function(el) {
+        observer.observe(el);
+    });
+});
+</script>
 {% endblock %}

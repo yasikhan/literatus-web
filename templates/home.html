@@ -1,94 +1,275 @@
 {% extends "layout.html" %}
 
-{% block title %}Home - Literatus{% endblock %}
+{% block title %}Literatus — track what you read{% endblock %}
 
 {% block content %}
-<div class="container mx-auto px-4 py-8">
-    <h1 class="text-4xl font-bold mb-8 text-center text-maroon">Welcome to Literatus</h1>
-    <p class="text-xl mb-8 text-center text-maroon">Your personal book journey starts here!</p>
+{% if current_user.is_authenticated %}
+<div class="homepage-grid">
+    <!-- LEFT: Community Favorites -->
+    <aside class="favorites-folder">
+        <div class="folder-tab open" id="folder-toggle">
+            Community Favorites <span class="tab-arrow">&#9654;</span>
+        </div>
+        <div class="folder-body open" id="folder-body">
+            {% if community_favorites %}
+            <ol class="folder-papers">
+                {% for book in community_favorites[:5] %}
+                <li class="folder-paper fade-in">
+                    <span class="folder-paper-count">&hearts; {{ book.fav_count }}</span>
+                    <div class="folder-paper-content">
+                        <div class="folder-paper-title">{{ book.title }}</div>
+                        <div class="folder-paper-author">{{ book.author }}</div>
+                    </div>
+                </li>
+                {% endfor %}
+            </ol>
+            {% else %}
+            <p class="folder-empty">no favorites yet — be the first to add a beloved book</p>
+            {% endif %}
+        </div>
+    </aside>
 
-    {% if current_user.is_authenticated %}
-        <div class="bg-cream p-6 rounded-lg shadow-md">
-            <h2 class="text-2xl font-semibold mb-4 text-maroon">Add a New Book</h2>
-            <input type="text" id="book-search" placeholder="Search for a book" class="w-full p-2 mb-4 border rounded bg-white">
-            <ul id="search-results" class="mb-4"></ul>
-            <div id="manual-entry" style="display: none;">
-                <form action="{{ url_for('add_book') }}" method="post" class="space-y-4">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                    <input type="text" id="book-title" name="title" required placeholder="Book Title" class="w-full p-2 border rounded bg-white">
-                    <input type="text" id="book-author" name="author" required placeholder="Author" class="w-full p-2 border rounded bg-white">
-                    <input type="text" id="google_books_url" name="google_books_url" required placeholder="" class="w-full p-2 border rounded bg-white">
-                    <select name="sentiment" required class="w-full p-2 border rounded bg-white">
-                        <option value="beloved">I loved it</option>
-                        <option value="tolerated">It was okay</option>
-                        <option value="disliked">I didn't like it</option>
-                    </select>
-                    <button type="submit" class="w-full bg-maroon text-white p-2 rounded hover:bg-maroon-dark">Add Book</button>
-                </form>
+    <!-- CENTER: Search + Want to Read -->
+    <section class="notebook-page">
+        <h2 class="annotation-label">Find Your Next Read</h2>
+        <div class="search-container">
+            <input type="text" id="book-search" class="search-input" placeholder="search for a book..." autocomplete="off">
+            <ul id="search-results" class="search-results"></ul>
+        </div>
+
+        <div class="want-to-read-section">
+            <h2 class="annotation-label">Want to Read</h2>
+            <ul id="want-to-read-list" class="want-to-read-list">
+                {% if want_to_read_books %}
+                    {% for book in want_to_read_books %}
+                    <li class="want-to-read-item fade-in">
+                        <div class="want-to-read-info">
+                            <div class="book-title">{{ book.title }}</div>
+                            <div class="book-author">{{ book.author }}</div>
+                        </div>
+                        <div class="item-actions">
+                            <form action="{{ url_for('mark_as_read', book_id=book.id) }}" method="POST">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="mark-read-btn">finished</button>
+                            </form>
+                            <form action="{{ url_for('remove_want_to_read', book_id=book.id) }}" method="POST">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="remove-btn">&times;</button>
+                            </form>
+                        </div>
+                    </li>
+                    {% endfor %}
+                {% else %}
+                    <li class="empty-shelf" id="empty-shelf-msg">search above to add books you want to read</li>
+                {% endif %}
+            </ul>
+        </div>
+    </section>
+
+    <!-- RIGHT: Reading Progress -->
+    <aside class="progress-card">
+        <h2 class="annotation-label">{{ current_year }} Reading</h2>
+        {% set goal = reading_goal or 0 %}
+        {% set read_count = books_read_this_year or 0 %}
+        {% set circumference = 326.73 %}
+        {% if goal > 0 %}
+            {% set progress = [read_count / goal, 1.0] | min %}
+        {% else %}
+            {% set progress = 0 %}
+        {% endif %}
+        {% set offset = circumference * (1 - progress) %}
+
+        <div class="progress-ring-container">
+            <svg class="progress-ring" viewBox="0 0 120 120">
+                <circle class="progress-ring-bg" cx="60" cy="60" r="52"/>
+                <circle class="progress-ring-fill" cx="60" cy="60" r="52"
+                    stroke-dasharray="{{ circumference }}"
+                    stroke-dashoffset="{{ circumference }}"
+                    data-target-offset="{{ offset }}"/>
+            </svg>
+            <div class="progress-text">
+                <span class="progress-count">{{ read_count }}</span>
+                <span class="progress-label">of {{ reading_goal if reading_goal else '?' }}</span>
             </div>
         </div>
-    {% else %}
-        <div class="text-center space-x-4">
-            <a href="{{ url_for('register') }}" class="bg-maroon text-white px-4 py-2 rounded hover:bg-maroon-dark">Register</a>
-            <a href="{{ url_for('login') }}" class="bg-maroon text-white px-4 py-2 rounded hover:bg-maroon-dark">Login</a>
-        </div>
-    {% endif %}
+
+        {% if not reading_goal %}
+        <form action="{{ url_for('set_reading_goal') }}" method="POST" class="goal-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="number" name="goal" min="1" max="500" placeholder="goal">
+            <button type="submit">set</button>
+        </form>
+        {% else %}
+        <button class="edit-goal-btn" id="edit-goal-toggle">edit goal</button>
+        <form action="{{ url_for('set_reading_goal') }}" method="POST" class="goal-form edit-goal-form" id="edit-goal-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="number" name="goal" min="1" max="500" placeholder="{{ reading_goal }}" value="{{ reading_goal }}">
+            <button type="submit">save</button>
+        </form>
+        {% endif %}
+    </aside>
 </div>
+
+{% else %}
+<!-- Landing Page -->
+<div class="landing-page">
+    <h1 class="landing-title">Literatus</h1>
+    <p class="landing-tagline">track what you read, rank what you love</p>
+    <div class="landing-actions">
+        <a href="{{ url_for('register') }}" class="tape-btn tape-btn--dark">register</a>
+        <a href="{{ url_for('login') }}" class="tape-btn">login</a>
+    </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script>
-    $(document).ready(function() {
-        let searchFailed = false;
+$(document).ready(function() {
+    // --- Edit goal toggle ---
+    var editGoalBtn = document.getElementById('edit-goal-toggle');
+    var editGoalForm = document.getElementById('edit-goal-form');
+    if (editGoalBtn && editGoalForm) {
+        editGoalBtn.addEventListener('click', function() {
+            editGoalForm.classList.toggle('visible');
+            editGoalBtn.style.display = editGoalForm.classList.contains('visible') ? 'none' : '';
+        });
+    }
 
-        $('#book-search').on('input', function() {
-            var query = $(this).val();
-            if (query.length > 2) {
+    // --- Folder toggle ---
+    var folderToggle = document.getElementById('folder-toggle');
+    var folderBody = document.getElementById('folder-body');
+    if (folderToggle && folderBody) {
+        folderToggle.addEventListener('click', function() {
+            folderToggle.classList.toggle('open');
+            folderBody.classList.toggle('open');
+        });
+    }
+
+    // --- Progress ring animation ---
+    var ring = document.querySelector('.progress-ring-fill');
+    if (ring) {
+        var targetOffset = ring.getAttribute('data-target-offset');
+        setTimeout(function() {
+            ring.style.strokeDashoffset = targetOffset;
+        }, 300);
+    }
+
+    // --- Intersection Observer for fade-ins ---
+    var observer = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('visible');
+            }
+        });
+    }, { threshold: 0.1 });
+    document.querySelectorAll('.fade-in').forEach(function(el) {
+        observer.observe(el);
+    });
+
+    // --- Search with debounce ---
+    var searchTimer;
+    var csrfToken = $('meta[name="csrf-token"]').attr('content');
+
+    $('#book-search').on('input', function() {
+        var query = $(this).val();
+        clearTimeout(searchTimer);
+
+        if (query.length > 2) {
+            searchTimer = setTimeout(function() {
                 $.get('/search_books', {query: query})
                     .done(function(data) {
                         var results = $('#search-results');
                         results.empty();
                         if (data.length > 0) {
-                            searchFailed = false;
-                            var csrfToken = $('meta[name="csrf-token"]').attr('content');
                             data.forEach(function(book) {
-                                results.append('<li class="cursor-pointer hover:bg-gray-100 p-2">' +
-                                               book.title + ' by ' + book.author +
-                                               '<form action="{{ url_for('add_book') }}" method="post" class="inline ml-2">' +
-                                               '<input type="hidden" name="csrf_token" value="' + csrfToken + '">' +
-                                               '<input type="hidden" name="title" value="' + book.title + '">' +
-                                               '<input type="hidden" name="author" value="' + book.author + '">' +
-                                               '<input type="hidden" name="google_books_url" value="' + (book.google_books_url || '') + '">' +
-                                               '<select name="sentiment" required class="ml-2 p-1 border rounded bg-white">' +
-                                               '<option value="beloved">Loved</option>' +
-                                               '<option value="tolerated">Okay</option>' +
-                                               '<option value="disliked">Disliked</option>' +
-                                               '</select>' +
-                                               '<button type="submit" class="ml-2 bg-maroon text-white px-2 py-1 rounded hover:bg-maroon-dark">Add</button>' +
-                                               '</form></li>');
+                                var coverHtml = book.cover_url
+                                    ? '<img src="' + book.cover_url + '" class="search-result-cover" alt="">'
+                                    : '';
+
+                                var safeTitle = $('<span>').text(book.title).html();
+                                var safeAuthor = $('<span>').text(book.author).html();
+                                var bookUrl = book.google_books_url || '';
+                                var bookCover = book.cover_url || '';
+
+                                function makeAddForm(sentiment, label) {
+                                    return '<form action="/add_book" method="POST" class="search-action-form">' +
+                                        '<input type="hidden" name="csrf_token" value="' + csrfToken + '">' +
+                                        '<input type="hidden" name="title" value="' + safeTitle + '">' +
+                                        '<input type="hidden" name="author" value="' + safeAuthor + '">' +
+                                        '<input type="hidden" name="google_books_url" value="' + bookUrl + '">' +
+                                        '<input type="hidden" name="cover_url" value="' + bookCover + '">' +
+                                        '<input type="hidden" name="sentiment" value="' + sentiment + '">' +
+                                        '<button type="submit" class="btn-sentiment btn-sentiment--' + sentiment + '">' + label + '</button>' +
+                                    '</form>';
+                                }
+
+                                var html = '<li class="search-result-item">' +
+                                    '<div class="search-result-top">' +
+                                        coverHtml +
+                                        '<div class="search-result-info">' +
+                                            '<div class="search-result-title">' + safeTitle + '</div>' +
+                                            '<div class="search-result-author">' + safeAuthor + '</div>' +
+                                        '</div>' +
+                                    '</div>' +
+                                    '<div class="search-result-actions">' +
+                                        '<button class="btn-want-to-read" data-title="' + safeTitle + '" data-author="' + safeAuthor + '" data-url="' + bookUrl + '" data-cover="' + bookCover + '">want to read</button>' +
+                                        makeAddForm('beloved', 'loved') +
+                                        makeAddForm('tolerated', 'tolerated') +
+                                        makeAddForm('disliked', 'disliked') +
+                                    '</div>' +
+                                '</li>';
+                                results.append(html);
                             });
-                            $('#manual-entry').hide();
                         } else {
-                            results.append('<li class="p-2">No results found. You can add the book manually.</li>');
-                            searchFailed = true;
-                            $('#manual-entry').show();
+                            results.append('<li class="search-result-item"><span class="empty-shelf">no results found</span></li>');
                         }
-                    })
-                    .fail(function() {
-                        searchFailed = true;
-                        $('#search-results').empty().append('<li class="p-2">Search failed. You can add the book manually.</li>');
-                        $('#manual-entry').show();
                     });
-            } else {
-                $('#search-results').empty();
-                if (searchFailed) {
-                    $('#manual-entry').show();
-                } else {
-                    $('#manual-entry').hide();
-                }
-            }
-        });
+            }, 300);
+        } else {
+            $('#search-results').empty();
+        }
     });
+
+    // --- Want to Read AJAX ---
+    $(document).on('click', '.btn-want-to-read', function() {
+        var btn = $(this);
+        var data = {
+            title: btn.data('title'),
+            author: btn.data('author'),
+            google_books_url: btn.data('url'),
+            cover_url: btn.data('cover'),
+            csrf_token: csrfToken
+        };
+
+        $.post('/add_want_to_read', data)
+            .done(function(resp) {
+                if (resp.success) {
+                    btn.text('added').prop('disabled', true).css('opacity', '0.5');
+                    // Remove empty message if present
+                    $('#empty-shelf-msg').remove();
+                    // Add to want-to-read list
+                    var item = '<li class="want-to-read-item fade-in visible">' +
+                        '<div class="want-to-read-info">' +
+                            '<div class="book-title">' + $('<span>').text(resp.title).html() + '</div>' +
+                            '<div class="book-author">' + $('<span>').text(resp.author).html() + '</div>' +
+                        '</div>' +
+                        '<div class="item-actions">' +
+                            '<form action="/mark_as_read/' + resp.book_id + '" method="POST">' +
+                                '<input type="hidden" name="csrf_token" value="' + csrfToken + '">' +
+                                '<button type="submit" class="mark-read-btn">finished</button>' +
+                            '</form>' +
+                            '<form action="/remove_want_to_read/' + resp.book_id + '" method="POST">' +
+                                '<input type="hidden" name="csrf_token" value="' + csrfToken + '">' +
+                                '<button type="submit" class="remove-btn">&times;</button>' +
+                            '</form>' +
+                        '</div>' +
+                    '</li>';
+                    $('#want-to-read-list').prepend(item);
+                }
+            });
+    });
+});
 </script>
 {% endblock %}

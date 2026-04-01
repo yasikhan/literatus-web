@@ -1,37 +1,40 @@
 {% extends "layout.html" %}
-{% block title %}Rerank Book - Literatus{% endblock %}
+
+{% block title %}Rerank Book — Literatus{% endblock %}
+
 {% block content %}
-<div class="max-w-4xl mx-auto text-center py-8">
-    <h1 class="text-3xl font-bold mb-8 text-maroon font-title">Rerank Books</h1>
+<div class="comparison-page">
+    <h1 class="comparison-prompt">which do you prefer now?</h1>
 
-    <p class="mb-8">Which book do you prefer now?</p>
+    <div class="comparison-cards">
+        <div class="comparison-card">
+            <form action="{{ url_for('rerank_book') }}" method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <input type="hidden" name="compared_book_id" value="{{ compared_book.id }}">
+                <input type="hidden" name="preference" value="1">
+                <button type="submit">
+                    <div class="book-title">{{ book_to_rerank.title }}</div>
+                    <div class="book-author">{{ book_to_rerank.author }}</div>
+                </button>
+            </form>
+        </div>
 
-    <div class="flex justify-center space-x-16 mb-8">
-        <form action="{{ url_for('rerank_book') }}" method="post" class="w-1/2">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-            <input type="hidden" name="compared_book_id" value="{{ compared_book.id }}">
-            <input type="hidden" name="preference" value="1">
-            <button type="submit" class="w-full bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition duration-300 text-left">
-                <h2 class="text-2xl font-semibold mb-4 text-maroon font-title">{{ book_to_rerank.title }}</h2>
-                <p>by {{ book_to_rerank.author }}</p>
-            </button>
-        </form>
+        <span class="comparison-vs">vs</span>
 
-        <form action="{{ url_for('rerank_book') }}" method="post" class="w-1/2">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-            <input type="hidden" name="compared_book_id" value="{{ compared_book.id }}">
-            <input type="hidden" name="preference" value="0">
-            <button type="submit" class="w-full bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition duration-300 text-left">
-                <h2 class="text-2xl font-semibold mb-4 text-maroon font-title">{{ compared_book.title }}</h2>
-                <p>by {{ compared_book.author }}</p>
-            </button>
-        </form>
+        <div class="comparison-card">
+            <form action="{{ url_for('rerank_book') }}" method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <input type="hidden" name="compared_book_id" value="{{ compared_book.id }}">
+                <input type="hidden" name="preference" value="0">
+                <button type="submit">
+                    <div class="book-title">{{ compared_book.title }}</div>
+                    <div class="book-author">{{ compared_book.author }}</div>
+                </button>
+            </form>
+        </div>
     </div>
 
-    <p class="mb-8">Click on the book you prefer to continue reranking.</p>
-
-    <div class="mt-8">
-        <a href="{{ url_for('profile', username=current_user.username) }}" class="text-maroon hover:underline">Cancel and return to profile</a>
-    </div>
+    <p class="comparison-hint">click the book you prefer to continue reranking</p>
+    <a href="{{ url_for('profile', username=current_user.username) }}" class="comparison-cancel">cancel and return to profile</a>
 </div>
 {% endblock %}

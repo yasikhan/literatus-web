@@ -4,10 +4,34 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.security import generate_password_hash, check_password_hash
 from urllib.parse import urlparse
+from sqlalchemy import func
+from datetime import datetime
 import requests
+import requests.adapters
+import urllib3
 import secrets
 import os
+import socket
 from flask_migrate import Migrate
+
+# Create a session that forces IPv4 for Open Library (their IPv6 is broken)
+ol_session = requests.Session()
+class IPv4HTTPAdapter(requests.adapters.HTTPAdapter):
+    def init_poolmanager(self, *args, **kwargs):
+        kwargs['socket_options'] = [(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)]
+        super().init_poolmanager(*args, **kwargs)
+
+    def send(self, request, **kwargs):
+        old_getaddrinfo = socket.getaddrinfo
+        def _ipv4_only(host, port, family=0, type=0, proto=0, flags=0):
+            return old_getaddrinfo(host, port, socket.AF_INET, type, proto, flags)
+        socket.getaddrinfo = _ipv4_only
+        try:
+            return super().send(request, **kwargs)
+        finally:
+            socket.getaddrinfo = old_getaddrinfo
+
+ol_session.mount('https://openlibrary.org', IPv4HTTPAdapter())
 
 app = Flask(__name__)
 
@@ -31,6 +55,7 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.Text)
     profile_image = db.Column(db.Text)
+    reading_goal = db.Column(db.Integer, nullable=True)
     books = db.relationship('Book', backref='user', lazy=True)
 
     def set_password(self, password):
@@ -56,10 +81,13 @@ class Book(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
     author = db.Column(db.String(100), nullable=False)
-    sentiment = db.Column(db.String(20), nullable=False)
-    position = db.Column(db.Integer, nullable=False)
+    sentiment = db.Column(db.String(20), nullable=True)
+    position = db.Column(db.Integer, nullable=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    google_books_url = db.Column(db.Text, nullable=True)  # New field for Google Books URL
+    google_books_url = db.Column(db.Text, nullable=True)
+    status = db.Column(db.String(20), nullable=False, default='read')
+    date_added = db.Column(db.DateTime, default=datetime.utcnow)
+    cover_url = db.Column(db.Text, nullable=True)
 
 
 
@@ -70,6 +98,36 @@ def load_user(user_id):
 
 @app.route('/')
 def home():
+    if current_user.is_authenticated:
+        community_favorites = db.session.query(
+            Book.title, Book.author, Book.cover_url, Book.google_books_url,
+            func.count(Book.id).label('fav_count')
+        ).filter(
+            Book.sentiment == 'beloved', Book.status == 'read'
+        ).group_by(
+            Book.title, Book.author, Book.cover_url, Book.google_books_url
+        ).order_by(
+            func.count(Book.id).desc()
+        ).limit(8).all()
+
+        want_to_read_books = Book.query.filter_by(
+            user_id=current_user.id, status='want_to_read'
+        ).order_by(Book.date_added.desc()).all()
+
+        current_year = datetime.utcnow().year
+        books_read_this_year = Book.query.filter(
+            Book.user_id == current_user.id,
+            Book.status == 'read',
+            db.extract('year', Book.date_added) == current_year
+        ).count()
+
+        return render_template('home.html',
+            community_favorites=community_favorites,
+            want_to_read_books=want_to_read_books,
+            books_read_this_year=books_read_this_year,
+            reading_goal=current_user.reading_goal,
+            current_year=current_year
+        )
     return render_template('home.html')
 
 
@@ -175,24 +233,67 @@ def search_users():
 @app.route('/search_books')
 def search_books():
     query = request.args.get('query', '')
-    if query:
+    if not query:
+        return jsonify([])
+
+    books = []
+    headers = {'User-Agent': 'Literatus/1.0'}
+
+    # Try Google Books first
+    try:
         url = f"https://www.googleapis.com/books/v1/volumes?q={query}&maxResults=5"
-        response = requests.get(url)
+        response = requests.get(url, timeout=5)
         if response.status_code == 200:
             data = response.json()
-            books = []
             for item in data.get('items', []):
                 volume_info = item.get('volumeInfo', {})
                 title = volume_info.get('title', 'Unknown Title')
                 authors = volume_info.get('authors', ['Unknown Author'])
-                google_books_url = volume_info.get('infoLink', '')  # Get the Google Books URL
+                google_books_url = volume_info.get('infoLink', '')
+                cover_url = volume_info.get('imageLinks', {}).get('thumbnail', '')
                 books.append({
                     "title": title,
                     "author": authors[0],
-                    "google_books_url": google_books_url
+                    "google_books_url": google_books_url,
+                    "cover_url": cover_url
                 })
-            return jsonify(books)
-    return jsonify([])
+            if books:
+                return jsonify(books)
+    except Exception:
+        pass
+
+    # Fallback to Open Library (using IPv4 session — their IPv6 is unreliable)
+    try:
+        ol_url = f"https://openlibrary.org/search.json?q={query}&limit=10"
+        response = ol_session.get(ol_url, headers=headers, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            for doc in data.get('docs', []):
+                if len(books) >= 5:
+                    break
+                langs = doc.get('language', [])
+                if langs and 'eng' not in langs:
+                    continue
+                # Skip non-Latin titles (multilingual editions with Cyrillic/CJK etc)
+                title_check = doc.get('title', '')
+                if title_check and not all(c.isascii() or c in '—–\u2019\u2018\u201c\u201d' for c in title_check):
+                    continue
+                title = doc.get('title', 'Unknown Title')
+                author_names = doc.get('author_name', ['Unknown Author'])
+                cover_id = doc.get('cover_i')
+                cover_url = f"https://covers.openlibrary.org/b/id/{cover_id}-M.jpg" if cover_id else ''
+                ol_key = doc.get('key', '')
+                book_url = f"https://openlibrary.org{ol_key}" if ol_key else ''
+                books.append({
+                    "title": title,
+                    "author": author_names[0],
+                    "google_books_url": book_url,
+                    "cover_url": cover_url
+                })
+    except Exception:
+        pass
+
+    return jsonify(books)
 
 
 @app.route('/add_book', methods=['POST'])
@@ -212,6 +313,8 @@ def add_book():
         flash('Title or author name is too long.')
         return redirect(url_for('home'))
 
+    cover_url = request.form.get('cover_url', '').strip()
+
     if google_books_url:
         parsed = urlparse(google_books_url)
         if parsed.scheme not in ('http', 'https') or 'google' not in parsed.netloc:
@@ -223,7 +326,10 @@ def add_book():
         sentiment=sentiment,
         user_id=current_user.id,
         position=0,
-        google_books_url=google_books_url  # Add the Google Books URL
+        google_books_url=google_books_url,
+        status='read',
+        date_added=datetime.utcnow(),
+        cover_url=cover_url or None
     )
     db.session.add(new_book)
     db.session.commit()
@@ -313,6 +419,96 @@ def delete_book(book_id):
     db.session.commit()
     flash('Book deleted successfully.')
     return redirect(url_for('profile', username=current_user.username))
+
+
+@app.route('/add_want_to_read', methods=['POST'])
+@login_required
+def add_want_to_read():
+    title = request.form.get('title', '').strip()
+    author = request.form.get('author', '').strip()
+    google_books_url = request.form.get('google_books_url', '').strip()
+    cover_url = request.form.get('cover_url', '').strip()
+
+    if not title or not author:
+        return jsonify({"success": False, "error": "Title and author required"}), 400
+
+    if google_books_url:
+        parsed = urlparse(google_books_url)
+        if parsed.scheme not in ('http', 'https') or 'google' not in parsed.netloc:
+            google_books_url = None
+
+    new_book = Book(
+        title=title,
+        author=author,
+        status='want_to_read',
+        sentiment=None,
+        position=None,
+        user_id=current_user.id,
+        google_books_url=google_books_url,
+        cover_url=cover_url or None
+    )
+    db.session.add(new_book)
+    db.session.commit()
+    return jsonify({"success": True, "book_id": new_book.id, "title": title, "author": author})
+
+
+@app.route('/mark_as_read/<int:book_id>', methods=['POST'])
+@login_required
+def mark_as_read(book_id):
+    book = Book.query.get_or_404(book_id)
+    if book.user_id != current_user.id:
+        flash('Permission denied.')
+        return redirect(url_for('home'))
+    book.status = 'read'
+    book.date_added = datetime.utcnow()
+    db.session.commit()
+    return redirect(url_for('choose_sentiment', book_id=book.id))
+
+
+@app.route('/choose_sentiment/<int:book_id>', methods=['GET', 'POST'])
+@login_required
+def choose_sentiment(book_id):
+    book = Book.query.get_or_404(book_id)
+    if book.user_id != current_user.id:
+        flash('Permission denied.')
+        return redirect(url_for('home'))
+
+    if request.method == 'POST':
+        sentiment = request.form.get('sentiment')
+        if sentiment not in ('beloved', 'tolerated', 'disliked'):
+            flash('Invalid sentiment.')
+            return redirect(url_for('choose_sentiment', book_id=book.id))
+        book.sentiment = sentiment
+        book.position = 0
+        db.session.commit()
+        return redirect(url_for('rate_new_book', book_id=book.id))
+
+    return render_template('choose_sentiment.html', book=book)
+
+
+@app.route('/set_reading_goal', methods=['POST'])
+@login_required
+def set_reading_goal():
+    goal = request.form.get('goal', type=int)
+    if goal and goal > 0:
+        current_user.reading_goal = goal
+        db.session.commit()
+    return redirect(url_for('home'))
+
+
+@app.route('/remove_want_to_read/<int:book_id>', methods=['POST'])
+@login_required
+def remove_want_to_read(book_id):
+    book = Book.query.get_or_404(book_id)
+    if book.user_id != current_user.id:
+        flash('Permission denied.')
+        return redirect(url_for('home'))
+    if book.status != 'want_to_read':
+        flash('This book is not on your want-to-read list.')
+        return redirect(url_for('home'))
+    db.session.delete(book)
+    db.session.commit()
+    return redirect(url_for('home'))
 
 
 @app.route('/initiate_rerank/<int:book_id>')

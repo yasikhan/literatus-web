@@ -1,35 +1,26 @@
 {% extends "layout.html" %}
+
+{% block title %}Find Readers — Literatus{% endblock %}
+
 {% block content %}
-<div class="flex flex-col items-center justify-start pt-16 bg-cream-100 min-h-screen">
-    <div class="w-full max-w-md p-6 bg-white rounded-lg shadow-md">
-        <h1 class="text-2xl font-bold mb-4 text-center text-maroon">Search Users</h1>
+<div class="search-users-page">
+    <h2 class="annotation-label">find readers</h2>
 
-        <form action="{{ url_for('search_users') }}" method="get" class="mb-6">
-            <div class="flex items-center">
-                <input type="text" name="query" value="{{ query or '' }}" placeholder="Search users..."
-                       class="flex-grow px-3 py-2 border border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-maroon">
-                <button type="submit"
-                        class="bg-maroon text-white px-4 py-2 rounded-r-lg hover:bg-maroon-dark transition duration-300">
-                    Search
-                </button>
-            </div>
-        </form>
+    <form action="{{ url_for('search_users') }}" method="get" class="search-form">
+        <input type="text" name="query" value="{{ query or '' }}" placeholder="search by username..." class="form-input">
+        <button type="submit">search</button>
+    </form>
 
-        {% if users %}
-            <h2 class="text-lg font-semibold mb-2 text-center">Results:</h2>
-            <ul class="space-y-1">
-            {% for user in users %}
-                <li class="text-center">
-                    <a href="{{ url_for('profile', username=user.username) }}"
-                       class="text-maroon hover:underline">
-                        {{ user.username }}
-                    </a>
-                </li>
-            {% endfor %}
-            </ul>
-        {% elif query %}
-            <p class="text-center text-gray-600">No users found.</p>
-        {% endif %}
-    </div>
+    {% if users %}
+        <ul class="user-results">
+        {% for user in users %}
+            <li>
+                <a href="{{ url_for('profile', username=user.username) }}">{{ user.username }}</a>
+            </li>
+        {% endfor %}
+        </ul>
+    {% elif query %}
+        <p class="empty-shelf">no readers found</p>
+    {% endif %}
 </div>
 {% endblock %}

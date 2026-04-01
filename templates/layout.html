@@ -4,66 +4,44 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Literatus{% endblock %}</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,700;1,400;1,700&family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/sketchpad.css') }}">
     <link rel="icon" href="{{ url_for('static', filename='images/favicon.ico') }}" type="image/x-icon">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <style>
-        body {
-            background-color: #F5E6D3;
-            font-family: 'EB Garamond', serif;
-        }
-        .bg-cream {
-            background-color: #FFF8E7;
-        }
-        .text-maroon {
-            color: #5A1A27;
-        }
-        .bg-maroon {
-            background-color: #5A1A27;
-        }
-        .hover\:bg-maroon-dark:hover {
-            background-color: #600000;
-        }
-        h1, h2, h3, h4, h5, h6, .font-title {
-            font-family: 'Playfair Display', serif;
-        }
-    </style>
     {% block extra_css %}{% endblock %}
 </head>
-<body class="min-h-screen flex flex-col text-lg">
-    <header class="bg-cream text-maroon p-4 shadow-md">
-        <div class="container mx-auto flex justify-between items-center">
-            <div class="flex items-center">
-                <img src="{{ url_for('static', filename='images/quilless.png') }}" alt="Literatus Logo" class="h-16 w-16 mr-2">
-                <a href="{{ url_for('home') }}" class="font-title font-bold text-3xl">Literatus</a>
+<body>
+    <header class="site-header">
+        <div class="header-inner">
+            <div class="logo-area">
+                <img src="{{ url_for('static', filename='images/quilless.png') }}" alt="Literatus">
+                <a href="{{ url_for('home') }}" class="logo-text">Literatus</a>
             </div>
-            <nav>
+            <nav class="site-nav">
                 {% if current_user.is_authenticated %}
-                    <a href="{{ url_for('profile', username=current_user.username) }}" class="text-maroon hover:text-maroon-dark mr-4">Profile</a>
-                    <a href="{{ url_for('search_users') }}" class="text-maroon hover:text-maroon-dark mr-4">Search Users</a>
-                    <a href="{{ url_for('logout') }}" class="text-maroon hover:text-maroon-dark">Logout</a>
+                    <a href="{{ url_for('profile', username=current_user.username) }}">profile</a>
+                    <a href="{{ url_for('search_users') }}">find readers</a>
+                    <a href="{{ url_for('logout') }}">logout</a>
                 {% else %}
-                    <a href="{{ url_for('login') }}" class="text-maroon hover:text-maroon-dark mr-4">Login</a>
-                    <a href="{{ url_for('register') }}" class="text-maroon hover:text-maroon-dark">Register</a>
+                    <a href="{{ url_for('login') }}">login</a>
+                    <a href="{{ url_for('register') }}">register</a>
                 {% endif %}
             </nav>
         </div>
     </header>
 
-    <main class="container mx-auto mt-8 p-8 bg-cream rounded-lg shadow-md flex-grow">
+    <main class="main-content">
         {% with messages = get_flashed_messages() %}
             {% if messages %}
                 {% for message in messages %}
-                    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">{{ message }}</div>
+                    <div class="flash-message">{{ message }}</div>
                 {% endfor %}
             {% endif %}
         {% endwith %}
         {% block content %}{% endblock %}
     </main>
 
-    <footer class="bg-cream text-maroon text-center p-4 mt-8 shadow-md">
-        <p>&copy; 2024 Literatus. All rights reserved.</p>
+    <footer class="site-footer">
+        <p>&copy; 2024 literatus</p>
     </footer>
 
     {% block extra_js %}{% endblock %}

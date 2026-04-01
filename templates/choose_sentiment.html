@@ -1,0 +1,41 @@
+{% extends "layout.html" %}
+
+{% block title %}How did you feel? — Literatus{% endblock %}
+
+{% block content %}
+<div class="sentiment-page">
+    <h2 class="annotation-label">you finished reading</h2>
+    <h1 class="sentiment-book-title">{{ book.title }}</h1>
+    <p class="sentiment-book-author">by {{ book.author }}</p>
+
+    <div class="sentiment-cards">
+        <div class="sentiment-card sentiment-beloved">
+            <form action="{{ url_for('choose_sentiment', book_id=book.id) }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="sentiment" value="beloved">
+                <button type="submit">
+                    <span class="sentiment-name">beloved</span>
+                </button>
+            </form>
+        </div>
+        <div class="sentiment-card sentiment-tolerated">
+            <form action="{{ url_for('choose_sentiment', book_id=book.id) }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="sentiment" value="tolerated">
+                <button type="submit">
+                    <span class="sentiment-name">tolerated</span>
+                </button>
+            </form>
+        </div>
+        <div class="sentiment-card sentiment-disliked">
+            <form action="{{ url_for('choose_sentiment', book_id=book.id) }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="sentiment" value="disliked">
+                <button type="submit">
+                    <span class="sentiment-name">disliked</span>
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

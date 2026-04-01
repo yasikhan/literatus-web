@@ -1,35 +1,39 @@
 {% extends "layout.html" %}
-{% block title %}Rate New Book - Literatus{% endblock %}
+
+{% block title %}Compare Books — Literatus{% endblock %}
+
 {% block content %}
+<div class="comparison-page">
+    <h1 class="comparison-prompt">which do you prefer?</h1>
 
-<div class="max-w-4xl mx-auto text-center">
-    <h1 class="text-3xl font-bold mb-6 text-maroon font-title">Compare Books</h1>
+    <div class="comparison-cards">
+        <div class="comparison-card">
+            <form action="{{ url_for('compare_books') }}" method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <input type="hidden" name="compared_book_id" value="{{ compared_book.id }}">
+                <input type="hidden" name="preference" value="1">
+                <button type="submit">
+                    <div class="book-title">{{ new_book.title }}</div>
+                    <div class="book-author">{{ new_book.author }}</div>
+                </button>
+            </form>
+        </div>
 
-    <p class="mb-6">Which book do you prefer?</p>
+        <span class="comparison-vs">vs</span>
 
-    <div class="flex justify-center space-x-8">
-        <form action="{{ url_for('compare_books') }}" method="post" class="w-1/2">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-            <input type="hidden" name="compared_book_id" value="{{ compared_book.id }}">
-            <input type="hidden" name="preference" value="1">
-            <button type="submit" class="w-full bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition duration-300 text-left">
-                <h2 class="text-2xl font-semibold mb-2 text-maroon font-title">{{ new_book.title }}</h2>
-                <p>by {{ new_book.author }}</p>
-            </button>
-        </form>
-
-        <form action="{{ url_for('compare_books') }}" method="post" class="w-1/2">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-            <input type="hidden" name="compared_book_id" value="{{ compared_book.id }}">
-            <input type="hidden" name="preference" value="0">
-            <button type="submit" class="w-full bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition duration-300 text-left">
-                <h2 class="text-2xl font-semibold mb-2 text-maroon font-title">{{ compared_book.title }}</h2>
-                <p>by {{ compared_book.author }}</p>
-            </button>
-        </form>
+        <div class="comparison-card">
+            <form action="{{ url_for('compare_books') }}" method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <input type="hidden" name="compared_book_id" value="{{ compared_book.id }}">
+                <input type="hidden" name="preference" value="0">
+                <button type="submit">
+                    <div class="book-title">{{ compared_book.title }}</div>
+                    <div class="book-author">{{ compared_book.author }}</div>
+                </button>
+            </form>
+        </div>
     </div>
 
-    <p class="mt-6">Click on the book you prefer to continue rating.</p>
+    <p class="comparison-hint">click the book you prefer to continue ranking</p>
 </div>
-
 {% endblock %}
