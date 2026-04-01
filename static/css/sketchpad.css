@@ -387,7 +387,7 @@ h1, h2, h3, h4, h5, h6 {
 /* ---- Notebook Page (Center) ---- */
 
 .notebook-page {
-    background: var(--paper-light);
+    background: white;
     border: 1px solid var(--ink4);
     border-radius: 2px;
     padding: 2rem 2rem 2rem 3rem;
@@ -653,7 +653,7 @@ h1, h2, h3, h4, h5, h6 {
 /* ---- Progress Card ---- */
 
 .progress-card {
-    background: var(--paper-light);
+    background: white;
     border: 1px solid var(--ink4);
     padding: 1.5rem;
     position: relative;
@@ -872,7 +872,7 @@ h1, h2, h3, h4, h5, h6 {
 .notebook-container {
     max-width: 440px;
     margin: 3rem auto;
-    background: var(--paper-light);
+    background: white;
     border: 1px solid var(--ink4);
     padding: 2.5rem 2.5rem 2.5rem 3.5rem;
     position: relative;
