@@ -241,7 +241,10 @@ def search_books():
 
     # Try Google Books first
     try:
+        google_books_key = os.environ.get('GOOGLE_BOOKS_API_KEY', '')
         url = f"https://www.googleapis.com/books/v1/volumes?q={query}&maxResults=5"
+        if google_books_key:
+            url += f"&key={google_books_key}"
         response = requests.get(url, timeout=5)
         if response.status_code == 200:
             data = response.json()
