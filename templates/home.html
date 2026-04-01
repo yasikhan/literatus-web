@@ -38,10 +38,17 @@
 
         <div class="want-to-read-section">
             <h2 class="annotation-label">Want to Read</h2>
+            <div class="category-tabs">
+                <button class="wtr-tab active" data-category="all">all</button>
+                <button class="wtr-tab" data-category="fiction">fiction</button>
+                <button class="wtr-tab" data-category="non-fiction">non-fiction</button>
+                <button class="wtr-tab" data-category="memoir">memoir</button>
+                <button class="wtr-tab" data-category="poetry">poetry</button>
+            </div>
             <ul id="want-to-read-list" class="want-to-read-list">
                 {% if want_to_read_books %}
                     {% for book in want_to_read_books %}
-                    <li class="want-to-read-item fade-in">
+                    <li class="want-to-read-item fade-in" data-category="{{ book.category or 'fiction' }}">
                         <div class="want-to-read-info">
                             <div class="book-title">{{ book.title }}</div>
                             <div class="book-author">{{ book.author }}</div>
@@ -191,6 +198,14 @@ $(document).ready(function() {
                                 var safeAuthor = $('<span>').text(book.author).html();
                                 var bookUrl = book.google_books_url || '';
                                 var bookCover = book.cover_url || '';
+                                var suggestedCat = book.suggested_category || 'fiction';
+
+                                var categorySelect = '<select class="category-select">' +
+                                    '<option value="fiction"' + (suggestedCat === 'fiction' ? ' selected' : '') + '>fiction</option>' +
+                                    '<option value="non-fiction"' + (suggestedCat === 'non-fiction' ? ' selected' : '') + '>non-fiction</option>' +
+                                    '<option value="memoir"' + (suggestedCat === 'memoir' ? ' selected' : '') + '>memoir</option>' +
+                                    '<option value="poetry"' + (suggestedCat === 'poetry' ? ' selected' : '') + '>poetry</option>' +
+                                '</select>';
 
                                 function makeAddForm(sentiment, label) {
                                     return '<form action="/add_book" method="POST" class="search-action-form">' +
@@ -200,6 +215,7 @@ $(document).ready(function() {
                                         '<input type="hidden" name="google_books_url" value="' + bookUrl + '">' +
                                         '<input type="hidden" name="cover_url" value="' + bookCover + '">' +
                                         '<input type="hidden" name="sentiment" value="' + sentiment + '">' +
+                                        '<input type="hidden" name="category" class="category-hidden" value="' + suggestedCat + '">' +
                                         '<button type="submit" class="btn-sentiment btn-sentiment--' + sentiment + '">' + label + '</button>' +
                                     '</form>';
                                 }
@@ -213,7 +229,8 @@ $(document).ready(function() {
                                         '</div>' +
                                     '</div>' +
                                     '<div class="search-result-actions">' +
-                                        '<button class="btn-want-to-read" data-title="' + safeTitle + '" data-author="' + safeAuthor + '" data-url="' + bookUrl + '" data-cover="' + bookCover + '">want to read</button>' +
+                                        categorySelect +
+                                        '<button class="btn-want-to-read" data-title="' + safeTitle + '" data-author="' + safeAuthor + '" data-url="' + bookUrl + '" data-cover="' + bookCover + '" data-category="' + suggestedCat + '">want to read</button>' +
                                         makeAddForm('beloved', 'loved') +
                                         makeAddForm('tolerated', 'tolerated') +
                                         makeAddForm('disliked', 'disliked') +
@@ -231,14 +248,34 @@ $(document).ready(function() {
         }
     });
 
+    // --- Want-to-read category tabs ---
+    $(document).on('click', '.wtr-tab', function() {
+        $('.wtr-tab').removeClass('active');
+        $(this).addClass('active');
+        var cat = $(this).data('category');
+        $('#want-to-read-list .want-to-read-item').each(function() {
+            $(this).toggle(cat === 'all' || $(this).data('category') === cat);
+        });
+    });
+
+    // --- Sync category select with hidden fields ---
+    $(document).on('change', '.category-select', function() {
+        var cat = $(this).val();
+        var item = $(this).closest('.search-result-item');
+        item.find('.category-hidden').val(cat);
+        item.find('.btn-want-to-read').data('category', cat);
+    });
+
     // --- Want to Read AJAX ---
     $(document).on('click', '.btn-want-to-read', function() {
         var btn = $(this);
+        var category = btn.data('category') || 'fiction';
         var data = {
             title: btn.data('title'),
             author: btn.data('author'),
             google_books_url: btn.data('url'),
             cover_url: btn.data('cover'),
+            category: category,
             csrf_token: csrfToken
         };
 
@@ -249,7 +286,7 @@ $(document).ready(function() {
                     // Remove empty message if present
                     $('#empty-shelf-msg').remove();
                     // Add to want-to-read list
-                    var item = '<li class="want-to-read-item fade-in visible">' +
+                    var item = '<li class="want-to-read-item fade-in visible" data-category="' + (resp.category || 'fiction') + '">' +
                         '<div class="want-to-read-info">' +
                             '<div class="book-title">' + $('<span>').text(resp.title).html() + '</div>' +
                             '<div class="book-author">' + $('<span>').text(resp.author).html() + '</div>' +

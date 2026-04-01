@@ -1047,6 +1047,63 @@ h1, h2, h3, h4, h5, h6 {
     text-decoration: none;
 }
 
+/* ---- Category Tabs ---- */
+
+.category-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.category-tab,
+.wtr-tab {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    padding: 0.3rem 0.8rem;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 3px;
+    background: transparent;
+    cursor: pointer;
+    color: var(--ink3);
+    transition: all 0.15s ease;
+    text-transform: lowercase;
+}
+
+.category-tab:hover,
+.wtr-tab:hover {
+    border-color: rgba(0, 0, 0, 0.25);
+    color: var(--ink);
+}
+
+.category-tab.active,
+.wtr-tab.active {
+    background: var(--paper-light);
+    border-color: var(--brown);
+    color: var(--brown);
+}
+
+.category-panel {
+    display: none;
+}
+
+.category-panel.active {
+    display: block;
+}
+
+/* ---- Category Select (search results) ---- */
+
+.category-select {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    padding: 0.2rem 0.4rem;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 3px;
+    background: transparent;
+    color: var(--ink3);
+    cursor: pointer;
+}
+
 /* ---- Book Categories ---- */
 
 .category-section {

@@ -16,8 +16,8 @@
                 <h1 class="profile-name">{{ user.username | capitalize }}</h1>
                 <p class="profile-username">@{{ user.username }}</p>
             {% endif %}
-            {% if beloved_books %}
-                <p class="profile-favorite">current favorite: {{ beloved_books[0].title }} by {{ beloved_books[0].author }}</p>
+            {% if first_beloved %}
+                <p class="profile-favorite">current favorite: {{ first_beloved.title }} by {{ first_beloved.author }}</p>
             {% else %}
                 <p class="profile-favorite">no favorite book yet</p>
             {% endif %}
@@ -30,53 +30,94 @@
         {% endif %}
     </div>
 
-    {% for category, books, color in [
-        ('Beloved', beloved_books, 'beloved'),
-        ('Tolerated', tolerated_books, 'tolerated'),
-        ('Disliked', disliked_books, 'disliked')
-    ] %}
-        <section class="category-section">
-            <h2 class="category-header">{{ category }}
-            </h2>
-            {% if books %}
-                <ul class="book-list">
-                {% for book in books|sort(attribute='rating', reverse=True) %}
-                    <li class="book-item fade-in">
-                        <span class="rating-circle rating-{{ color }}">
-                            {{ "%.1f"|format(book.rating) }}
-                        </span>
-                        <div class="book-info">
-                            <div class="book-info-title">
-                                {% if book.google_books_url %}
-                                    <a href="{{ book.google_books_url }}" target="_blank">{{ book.title }}</a>
-                                {% else %}
-                                    {{ book.title }}
-                                {% endif %}
+    <div class="category-tabs">
+        {% for cat in categories %}
+        <button class="category-tab {% if loop.first %}active{% endif %}" data-category="{{ cat }}">{{ cat }}</button>
+        {% endfor %}
+    </div>
+
+    {% for cat in categories %}
+    <div class="category-panel {% if loop.first %}active{% endif %}" id="cat-{{ cat }}">
+        {% for sentiment_name, books, color in [
+            ('Beloved', categories_data[cat].beloved, 'beloved'),
+            ('Tolerated', categories_data[cat].tolerated, 'tolerated'),
+            ('Disliked', categories_data[cat].disliked, 'disliked')
+        ] %}
+            <section class="category-section">
+                <h2 class="category-header">{{ sentiment_name }}</h2>
+                {% if books %}
+                    <ul class="book-list">
+                    {% for book in books|sort(attribute='rating', reverse=True) %}
+                        <li class="book-item fade-in">
+                            <span class="rating-circle rating-{{ color }}">
+                                {{ "%.1f"|format(book.rating) }}
+                            </span>
+                            <div class="book-info">
+                                <div class="book-info-title">
+                                    {% if book.google_books_url %}
+                                        <a href="{{ book.google_books_url }}" target="_blank">{{ book.title }}</a>
+                                    {% else %}
+                                        {{ book.title }}
+                                    {% endif %}
+                                </div>
+                                <div class="book-info-author">{{ book.author }}</div>
                             </div>
-                            <div class="book-info-author">{{ book.author }}</div>
-                        </div>
-                        <span class="book-position">#{{ book.global_position }}</span>
-                        {% if is_own_profile %}
-                        <div class="book-actions">
-                            <form action="{{ url_for('delete_book', book_id=book.id) }}" method="POST" style="display:inline">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                <button type="submit" class="btn-delete" onclick="return confirm('Delete this book?');">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                        <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                                    </svg>
-                                </button>
-                            </form>
-                            <a href="{{ url_for('initiate_rerank', book_id=book.id) }}" class="btn-rerank">rerank</a>
-                        </div>
-                        {% endif %}
-                    </li>
-                {% endfor %}
-                </ul>
-            {% else %}
-                <p class="empty-category">no books here yet</p>
-            {% endif %}
-        </section>
+                            <span class="book-position">#{{ book.global_position }}</span>
+                            {% if is_own_profile %}
+                            <div class="book-actions">
+                                <form action="{{ url_for('delete_book', book_id=book.id) }}" method="POST" style="display:inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                    <button type="submit" class="btn-delete" onclick="return confirm('Delete this book?');">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                            <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                                        </svg>
+                                    </button>
+                                </form>
+                                <a href="{{ url_for('initiate_rerank', book_id=book.id) }}" class="btn-rerank">rerank</a>
+                            </div>
+                            {% endif %}
+                        </li>
+                    {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="empty-category">no books here yet</p>
+                {% endif %}
+            </section>
+        {% endfor %}
+    </div>
     {% endfor %}
+
+    {% if want_to_read %}
+    <h2 class="category-header" style="margin-top: 2rem;">Want to Read</h2>
+    <div class="category-tabs">
+        <button class="wtr-tab active" data-category="all">all</button>
+        {% for cat in categories %}
+        <button class="wtr-tab" data-category="{{ cat }}">{{ cat }}</button>
+        {% endfor %}
+    </div>
+    <ul class="book-list">
+        {% for book in want_to_read %}
+        <li class="book-item fade-in wtr-item" data-category="{{ book.category or 'fiction' }}">
+            <div class="book-info">
+                <div class="book-info-title">{{ book.title }}</div>
+                <div class="book-info-author">{{ book.author }}</div>
+            </div>
+            {% if is_own_profile %}
+            <div class="book-actions">
+                <form action="{{ url_for('mark_as_read', book_id=book.id) }}" method="POST" style="display:inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" class="mark-read-btn">finished</button>
+                </form>
+                <form action="{{ url_for('remove_want_to_read', book_id=book.id) }}" method="POST" style="display:inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" class="remove-btn">&times;</button>
+                </form>
+            </div>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
 </div>
 
 <script>
@@ -90,6 +131,28 @@ document.addEventListener('DOMContentLoaded', function() {
     }, { threshold: 0.1 });
     document.querySelectorAll('.fade-in').forEach(function(el) {
         observer.observe(el);
+    });
+
+    // Category tab switching
+    document.querySelectorAll('.category-tab').forEach(function(tab) {
+        tab.addEventListener('click', function() {
+            document.querySelectorAll('.category-tab').forEach(function(t) { t.classList.remove('active'); });
+            document.querySelectorAll('.category-panel').forEach(function(p) { p.classList.remove('active'); });
+            this.classList.add('active');
+            document.getElementById('cat-' + this.dataset.category).classList.add('active');
+        });
+    });
+
+    // Want-to-read tab switching
+    document.querySelectorAll('.wtr-tab').forEach(function(tab) {
+        tab.addEventListener('click', function() {
+            document.querySelectorAll('.wtr-tab').forEach(function(t) { t.classList.remove('active'); });
+            this.classList.add('active');
+            var cat = this.dataset.category;
+            document.querySelectorAll('.wtr-item').forEach(function(item) {
+                item.style.display = (cat === 'all' || item.dataset.category === cat) ? '' : 'none';
+            });
+        });
     });
 });
 </script>

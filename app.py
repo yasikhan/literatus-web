@@ -108,7 +108,26 @@ class Book(db.Model):
     status = db.Column(db.String(20), nullable=False, default='read')
     date_added = db.Column(db.DateTime, default=datetime.utcnow)
     cover_url = db.Column(db.Text, nullable=True)
+    category = db.Column(db.String(20), nullable=True, default='fiction')
 
+
+CATEGORIES = ['fiction', 'non-fiction', 'memoir', 'poetry']
+
+
+def detect_category(subjects):
+    """Map Google Books categories or Open Library subjects to our categories."""
+    if not subjects:
+        return 'fiction'
+    text = ' '.join(subjects).lower()
+    if any(kw in text for kw in ['poetry', 'poems', 'verse', 'poet']):
+        return 'poetry'
+    if any(kw in text for kw in ['memoir', 'biography', 'autobiography', 'personal narrative']):
+        return 'memoir'
+    if any(kw in text for kw in ['fiction', 'novel', 'thriller', 'mystery', 'fantasy',
+                                  'science fiction', 'romance', 'horror', 'literary',
+                                  'suspense', 'adventure', 'dystopi']):
+        return 'fiction'
+    return 'non-fiction'
 
 
 @login_manager.user_loader
@@ -206,38 +225,46 @@ def logout():
 def profile(username):
     user = User.query.filter_by(username=username).first_or_404()
 
-    beloved_books = Book.query.filter_by(user_id=user.id, sentiment='beloved').order_by(Book.position).all()
-    tolerated_books = Book.query.filter_by(user_id=user.id, sentiment='tolerated').order_by(Book.position).all()
-    disliked_books = Book.query.filter_by(user_id=user.id, sentiment='disliked').order_by(Book.position).all()
+    categories_data = {}
+    first_beloved = None
+    for cat in CATEGORIES:
+        beloved = Book.query.filter_by(user_id=user.id, sentiment='beloved', category=cat).order_by(Book.position).all()
+        tolerated = Book.query.filter_by(user_id=user.id, sentiment='tolerated', category=cat).order_by(Book.position).all()
+        disliked = Book.query.filter_by(user_id=user.id, sentiment='disliked', category=cat).order_by(Book.position).all()
 
-    all_books = beloved_books + tolerated_books + disliked_books
-    total_books = len(all_books)
+        all_cat_books = beloved + tolerated + disliked
+        for i, book in enumerate(all_cat_books):
+            if book.sentiment == 'beloved':
+                base, max_rating = 7.5, 10
+            elif book.sentiment == 'tolerated':
+                base, max_rating = 4.5, 7
+            else:
+                base, max_rating = 1, 4
 
-    for i, book in enumerate(all_books):
-        if book.sentiment == 'beloved':
-            base = 7.5
-            max_rating = 10
-        elif book.sentiment == 'tolerated':
-            base = 4.5
-            max_rating = 7
-        else:  # disliked
-            base = 1
-            max_rating = 4
+            sentiment_books = beloved if book in beloved else tolerated if book in tolerated else disliked
+            sentiment_position = sentiment_books.index(book)
+            sentiment_total = len(sentiment_books)
+            book.rating = base + ((max_rating - base) * (1 - (sentiment_position / (sentiment_total - 1 or 1))))
+            book.rating = round(book.rating, 1)
+            book.global_position = i + 1
 
-        category_books = beloved_books if book in beloved_books else \
-            tolerated_books if book in tolerated_books else \
-                disliked_books
-        category_position = category_books.index(book)
-        category_total = len(category_books)
+        if not first_beloved and beloved:
+            first_beloved = beloved[0]
 
-        book.rating = base + ((max_rating - base) * (1 - (category_position / (category_total - 1 or 1))))
-        book.rating = round(book.rating, 1)  # Round to one decimal place
-        book.global_position = i + 1
+        categories_data[cat] = {
+            'beloved': beloved,
+            'tolerated': tolerated,
+            'disliked': disliked,
+            'total': len(all_cat_books)
+        }
+
+    want_to_read = Book.query.filter_by(user_id=user.id, status='want_to_read').order_by(Book.date_added.desc()).all()
 
     return render_template('profile.html', user=user,
-                           beloved_books=beloved_books,
-                           tolerated_books=tolerated_books,
-                           disliked_books=disliked_books,
+                           categories=CATEGORIES,
+                           categories_data=categories_data,
+                           first_beloved=first_beloved,
+                           want_to_read=want_to_read,
                            is_own_profile=current_user.is_authenticated and current_user.id == user.id)
 
 
@@ -306,11 +333,13 @@ def search_books():
                 authors = volume_info.get('authors', ['Unknown Author'])
                 google_books_url = volume_info.get('infoLink', '')
                 cover_url = volume_info.get('imageLinks', {}).get('thumbnail', '')
+                suggested_category = detect_category(volume_info.get('categories', []))
                 books.append({
                     "title": title,
                     "author": authors[0],
                     "google_books_url": google_books_url,
-                    "cover_url": cover_url
+                    "cover_url": cover_url,
+                    "suggested_category": suggested_category
                 })
             if books:
                 return jsonify(books)
@@ -339,11 +368,13 @@ def search_books():
                 cover_url = f"https://covers.openlibrary.org/b/id/{cover_id}-M.jpg" if cover_id else ''
                 ol_key = doc.get('key', '')
                 book_url = f"https://openlibrary.org{ol_key}" if ol_key else ''
+                suggested_category = detect_category(doc.get('subject', [])[:10])
                 books.append({
                     "title": title,
                     "author": author_names[0],
                     "google_books_url": book_url,
-                    "cover_url": cover_url
+                    "cover_url": cover_url,
+                    "suggested_category": suggested_category
                 })
     except Exception:
         pass
@@ -368,6 +399,10 @@ def add_book():
         flash('Title or author name is too long.')
         return redirect(url_for('home'))
 
+    category = request.form.get('category', 'fiction')
+    if category not in CATEGORIES:
+        category = 'fiction'
+
     cover_url = request.form.get('cover_url', '').strip()
 
     if google_books_url:
@@ -384,7 +419,8 @@ def add_book():
         google_books_url=google_books_url,
         status='read',
         date_added=datetime.utcnow(),
-        cover_url=cover_url or None
+        cover_url=cover_url or None,
+        category=category
     )
     db.session.add(new_book)
     db.session.commit()
@@ -401,7 +437,7 @@ def rate_new_book(book_id):
         flash('Book not found.')
         return redirect(url_for('profile', username=current_user.username))
 
-    books_to_compare = Book.query.filter_by(user_id=current_user.id, sentiment=new_book.sentiment).order_by(Book.position).all()
+    books_to_compare = Book.query.filter_by(user_id=current_user.id, sentiment=new_book.sentiment, category=new_book.category).order_by(Book.position).all()
     books_to_compare = [book for book in books_to_compare if book.id != new_book.id]
 
     if not books_to_compare:
@@ -466,7 +502,7 @@ def delete_book(book_id):
     db.session.delete(book)
 
     # Update positions of remaining books in the same sentiment category
-    remaining_books = Book.query.filter_by(user_id=current_user.id, sentiment=book.sentiment).filter(
+    remaining_books = Book.query.filter_by(user_id=current_user.id, sentiment=book.sentiment, category=book.category).filter(
         Book.position > book.position).all()
     for remaining_book in remaining_books:
         remaining_book.position -= 1
@@ -492,6 +528,10 @@ def add_want_to_read():
         if parsed.scheme not in ('http', 'https') or 'google' not in parsed.netloc:
             google_books_url = None
 
+    category = request.form.get('category', 'fiction')
+    if category not in CATEGORIES:
+        category = 'fiction'
+
     new_book = Book(
         title=title,
         author=author,
@@ -500,11 +540,12 @@ def add_want_to_read():
         position=None,
         user_id=current_user.id,
         google_books_url=google_books_url,
-        cover_url=cover_url or None
+        cover_url=cover_url or None,
+        category=category
     )
     db.session.add(new_book)
     db.session.commit()
-    return jsonify({"success": True, "book_id": new_book.id, "title": title, "author": author})
+    return jsonify({"success": True, "book_id": new_book.id, "title": title, "author": author, "category": category})
 
 
 @app.route('/mark_as_read/<int:book_id>', methods=['POST'])
@@ -574,7 +615,7 @@ def initiate_rerank(book_id):
         flash('You do not have permission to rerank this book.')
         return redirect(url_for('profile', username=current_user.username))
 
-    books_to_compare = Book.query.filter_by(user_id=current_user.id, sentiment=book_to_rerank.sentiment).order_by(
+    books_to_compare = Book.query.filter_by(user_id=current_user.id, sentiment=book_to_rerank.sentiment, category=book_to_rerank.category).order_by(
         Book.position).all()
     books_to_compare = [book for book in books_to_compare if book.id != book_to_rerank.id]
 
@@ -642,6 +683,7 @@ def reposition_book(book, new_position):
     books_to_update = Book.query.filter(
         Book.user_id == book.user_id,
         Book.sentiment == book.sentiment,
+        Book.category == book.category,
         ((Book.position >= new_position) & (Book.position < old_position)) |
         ((Book.position <= new_position) & (Book.position > old_position))
     ).all()
@@ -660,6 +702,7 @@ def insert_book(new_book, insert_position):
     books_to_update = Book.query.filter(
         Book.user_id == new_book.user_id,
         Book.sentiment == new_book.sentiment,
+        Book.category == new_book.category,
         Book.position >= insert_position
     ).all()
 
