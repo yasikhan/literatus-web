@@ -13,6 +13,10 @@ import urllib3
 import secrets
 import os
 import socket
+import random
+import re
+import time
+import xml.etree.ElementTree as ET
 from flask_migrate import Migrate
 
 # Create a session that forces IPv4 for Open Library (their IPv6 is broken)
@@ -130,6 +134,182 @@ def detect_category(subjects):
     return 'non-fiction'
 
 
+def parse_goodreads_user_id(url):
+    """Extract numeric user ID from a Goodreads profile URL."""
+    match = re.search(r'/user/show/(\d+)', url or '')
+    return match.group(1) if match else None
+
+
+def fetch_goodreads_books(user_id):
+    """Fetch rated books from a Goodreads user's read shelf via RSS."""
+    books = []
+    page = 1
+    while True:
+        url = f"https://www.goodreads.com/review/list_rss/{user_id}?shelf=read&per_page=200&page={page}"
+        try:
+            resp = requests.get(url, timeout=15, headers={'User-Agent': 'Literatus/1.0'})
+            resp.raise_for_status()
+        except Exception:
+            break
+        try:
+            root = ET.fromstring(resp.content)
+        except ET.ParseError:
+            break
+        items = root.findall('.//item')
+        if not items:
+            break
+        for item in items:
+            title = (item.findtext('title') or '').strip()
+            author = (item.findtext('author_name') or '').strip()
+            rating = (item.findtext('user_rating') or '0').strip()
+            cover = (item.findtext('book_image_url') or '').strip()
+            if not title or not author:
+                continue
+            rating_int = int(rating) if rating.isdigit() else 0
+            if rating_int == 0:
+                continue
+            if 'nophoto' in cover:
+                cover = ''
+            books.append({
+                'title': title[:200],
+                'author': author[:100],
+                'rating': rating_int,
+                'cover_url': cover or None,
+            })
+        if len(items) < 200:
+            break
+        page += 1
+    return books
+
+
+def map_goodreads_rating(rating):
+    """Map a 1-5 star rating to a sentiment."""
+    if rating >= 4:
+        return 'beloved'
+    elif rating == 3:
+        return 'tolerated'
+    else:
+        return 'disliked'
+
+
+def lookup_book_category(title, author, author_cache=None):
+    """Look up a book's category via Google Books or Open Library."""
+    if author_cache is not None and author in author_cache:
+        return author_cache[author]
+
+    category = 'fiction'
+    # Try Google Books
+    try:
+        google_key = os.environ.get('GOOGLE_BOOKS_API_KEY', '')
+        gurl = f"https://www.googleapis.com/books/v1/volumes?q=intitle:{requests.utils.quote(title)}+inauthor:{requests.utils.quote(author)}&maxResults=1"
+        if google_key:
+            gurl += f"&key={google_key}"
+        resp = requests.get(gurl, timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            items = data.get('items', [])
+            if items:
+                cats = items[0].get('volumeInfo', {}).get('categories', [])
+                if cats:
+                    category = detect_category(cats)
+                    if author_cache is not None:
+                        author_cache[author] = category
+                    return category
+    except Exception:
+        pass
+
+    # Fallback to Open Library
+    try:
+        ol_url = f"https://openlibrary.org/search.json?title={requests.utils.quote(title)}&author={requests.utils.quote(author)}&limit=1"
+        resp = ol_session.get(ol_url, timeout=10)
+        if resp.status_code == 200:
+            docs = resp.json().get('docs', [])
+            if docs:
+                subjects = docs[0].get('subject', [])[:10]
+                if subjects:
+                    category = detect_category(subjects)
+    except Exception:
+        pass
+
+    if author_cache is not None:
+        author_cache[author] = category
+    return category
+
+
+def import_goodreads_books(user_id, books, detect_categories=True):
+    """Import a list of Goodreads books for a user. Returns (imported_count, skipped_count)."""
+    # Get existing books for dedup (case-insensitive)
+    existing = Book.query.filter_by(user_id=user_id, status='read').all()
+    existing_set = {(b.title.lower(), b.author.lower()) for b in existing}
+
+    author_cache = {}
+    new_books = []
+    skipped = 0
+
+    for book_data in books:
+        key = (book_data['title'].lower(), book_data['author'].lower())
+        if key in existing_set:
+            skipped += 1
+            continue
+        existing_set.add(key)  # prevent dupes within import
+
+        sentiment = map_goodreads_rating(book_data['rating'])
+        if detect_categories:
+            category = lookup_book_category(book_data['title'], book_data['author'], author_cache)
+            time.sleep(0.15)
+        else:
+            category = 'fiction'
+
+        new_books.append({
+            'title': book_data['title'],
+            'author': book_data['author'],
+            'sentiment': sentiment,
+            'category': category,
+            'rating': book_data['rating'],
+            'cover_url': book_data['cover_url'],
+        })
+
+    # Group by (sentiment, category) and assign positions
+    groups = {}
+    for book in new_books:
+        key = (book['sentiment'], book['category'])
+        groups.setdefault(key, []).append(book)
+
+    for (sentiment, category), group_books in groups.items():
+        max_pos = db.session.query(func.max(Book.position)).filter_by(
+            user_id=user_id, sentiment=sentiment, category=category
+        ).scalar() or 0
+
+        # Sort by stars desc, shuffle within same star tier
+        group_books.sort(key=lambda b: -b['rating'])
+        i = 0
+        while i < len(group_books):
+            j = i
+            while j < len(group_books) and group_books[j]['rating'] == group_books[i]['rating']:
+                j += 1
+            tier = group_books[i:j]
+            random.shuffle(tier)
+            group_books[i:j] = tier
+            i = j
+
+        for idx, book_data in enumerate(group_books):
+            new_book = Book(
+                title=book_data['title'],
+                author=book_data['author'],
+                sentiment=sentiment,
+                category=category,
+                position=max_pos + idx + 1,
+                user_id=user_id,
+                status='read',
+                date_added=datetime.utcnow(),
+                cover_url=book_data['cover_url'],
+            )
+            db.session.add(new_book)
+
+    db.session.commit()
+    return len(new_books), skipped
+
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
@@ -194,6 +374,19 @@ def register():
         new_user.set_password(password)
         db.session.add(new_user)
         db.session.commit()
+
+        goodreads_url = request.form.get('goodreads_url', '').strip()
+        gr_user_id = parse_goodreads_user_id(goodreads_url) if goodreads_url else None
+
+        if gr_user_id:
+            login_user(new_user)
+            books = fetch_goodreads_books(gr_user_id)
+            if books:
+                imported, _ = import_goodreads_books(new_user.id, books, detect_categories=True)
+                flash(f'Welcome! Imported {imported} books from Goodreads.')
+            else:
+                flash('Welcome! Could not find rated books on that Goodreads profile.')
+            return redirect(url_for('profile', username=new_user.username))
 
         flash('Registration successful! Please log in.')
         return redirect(url_for('login'))
@@ -298,6 +491,39 @@ def edit_profile():
         return redirect(url_for('profile', username=current_user.username))
 
     return render_template('edit_profile.html')
+
+
+@app.route('/import_goodreads', methods=['GET', 'POST'])
+@login_required
+def import_goodreads_page():
+    if request.method == 'POST':
+        goodreads_url = request.form.get('goodreads_url', '').strip()
+        skip_categories = request.form.get('skip_categories') == 'on'
+
+        gr_user_id = parse_goodreads_user_id(goodreads_url)
+        if not gr_user_id:
+            flash('Please enter a valid Goodreads profile URL.')
+            return redirect(url_for('import_goodreads_page'))
+
+        books = fetch_goodreads_books(gr_user_id)
+        if not books:
+            flash('No rated books found. Make sure the Goodreads profile is public.')
+            return redirect(url_for('import_goodreads_page'))
+
+        imported, skipped = import_goodreads_books(
+            current_user.id, books, detect_categories=not skip_categories
+        )
+
+        if imported == 0 and skipped > 0:
+            flash(f'All {skipped} books are already in your library.')
+        elif skipped > 0:
+            flash(f'Imported {imported} books! Skipped {skipped} already in your library.')
+        else:
+            flash(f'Imported {imported} books from Goodreads!')
+
+        return redirect(url_for('profile', username=current_user.username))
+
+    return render_template('import_goodreads.html')
 
 
 @app.route('/search_users')

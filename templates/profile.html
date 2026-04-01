@@ -25,6 +25,7 @@
         {% if is_own_profile %}
         <div class="profile-actions">
             <a href="{{ url_for('edit_profile') }}" class="add-book-link">edit profile</a>
+            <a href="{{ url_for('import_goodreads_page') }}" class="add-book-link">import from goodreads</a>
             <a href="{{ url_for('home') }}" class="add-book-link">+ add book</a>
         </div>
         {% endif %}
