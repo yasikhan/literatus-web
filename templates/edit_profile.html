@@ -1,0 +1,35 @@
+{% extends "layout.html" %}
+
+{% block title %}Edit Profile — Literatus{% endblock %}
+
+{% block content %}
+<div class="notebook-container">
+    <h1>edit profile</h1>
+    <form method="POST" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+        <div class="form-group">
+            <label class="form-label">profile photo</label>
+            <div class="avatar-upload">
+                <div class="profile-avatar">
+                    <img src="{{ current_user.avatar_url }}" alt="{{ current_user.username }}">
+                </div>
+                <div>
+                    <input type="file" name="profile_image" accept="image/png,image/jpeg,image/gif,image/webp">
+                    <p class="form-hint">max 8 MB — png, jpg, gif, or webp</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="display_name" class="form-label">display name</label>
+            <input type="text" id="display_name" name="display_name"
+                   value="{{ current_user.display_name or '' }}"
+                   placeholder="how you'd like to be known" maxlength="100" class="form-input">
+        </div>
+
+        <button type="submit" class="form-submit">save changes</button>
+    </form>
+    <p class="form-link"><a href="{{ url_for('profile', username=current_user.username) }}">back to profile</a></p>
+</div>
+{% endblock %}

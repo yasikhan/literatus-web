@@ -3,6 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 from urllib.parse import urlparse
 from sqlalchemy import func
 from datetime import datetime
@@ -42,6 +43,15 @@ if uri and uri.startswith("postgres://"):
 app.config['SQLALCHEMY_DATABASE_URI'] = uri or 'sqlite:///literatus.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
+app.config['MAX_CONTENT_LENGTH'] = 8 * 1024 * 1024  # 8MB upload limit
+
+UPLOAD_FOLDER = os.path.join(app.static_folder, 'uploads', 'avatars')
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 db = SQLAlchemy(app)
 csrf = CSRFProtect(app)
@@ -49,14 +59,24 @@ migrate = Migrate(app, db)
 
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
+login_manager.login_message = 'log in to continue'
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
+    display_name = db.Column(db.String(100), nullable=True)
     password_hash = db.Column(db.Text)
     profile_image = db.Column(db.Text)
     reading_goal = db.Column(db.Integer, nullable=True)
     books = db.relationship('Book', backref='user', lazy=True)
+
+    @property
+    def avatar_url(self):
+        if self.profile_image and not self.profile_image.startswith('http'):
+            return url_for('static', filename=self.profile_image)
+        elif self.profile_image:
+            return self.profile_image
+        return f"https://api.dicebear.com/6.x/initials/svg?seed={self.username}"
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -219,6 +239,38 @@ def profile(username):
                            tolerated_books=tolerated_books,
                            disliked_books=disliked_books,
                            is_own_profile=current_user.is_authenticated and current_user.id == user.id)
+
+
+@app.route('/edit_profile', methods=['GET', 'POST'])
+@login_required
+def edit_profile():
+    if request.method == 'POST':
+        display_name = request.form.get('display_name', '').strip()
+        if len(display_name) > 100:
+            flash('Display name must be under 100 characters.')
+            return redirect(url_for('edit_profile'))
+        current_user.display_name = display_name or None
+
+        if 'profile_image' in request.files:
+            file = request.files['profile_image']
+            if file and file.filename and allowed_file(file.filename):
+                ext = secure_filename(file.filename).rsplit('.', 1)[1].lower()
+                new_filename = f"{current_user.id}_{int(datetime.utcnow().timestamp())}.{ext}"
+                file.save(os.path.join(UPLOAD_FOLDER, new_filename))
+                if current_user.profile_image and not current_user.profile_image.startswith('http'):
+                    old_path = os.path.join(app.static_folder, current_user.profile_image)
+                    if os.path.exists(old_path):
+                        os.remove(old_path)
+                current_user.profile_image = f"uploads/avatars/{new_filename}"
+            elif file and file.filename:
+                flash('Invalid file type. Use PNG, JPG, GIF, or WebP.')
+                return redirect(url_for('edit_profile'))
+
+        db.session.commit()
+        flash('Profile updated!')
+        return redirect(url_for('profile', username=current_user.username))
+
+    return render_template('edit_profile.html')
 
 
 @app.route('/search_users')

@@ -1,20 +1,21 @@
 {% extends "layout.html" %}
 
-{% block title %}{{ user.username.capitalize() }}'s Library — Literatus{% endblock %}
+{% block title %}{{ (user.display_name or user.username | capitalize) }}'s Library — Literatus{% endblock %}
 
 {% block content %}
 <div style="max-width: 800px; margin: 0 auto;">
     <div class="profile-header">
         <div class="profile-avatar">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
-                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-                <line x1="8" y1="7" x2="16" y2="7"/>
-                <line x1="8" y1="11" x2="13" y2="11"/>
-            </svg>
+            <img src="{{ user.avatar_url }}" alt="{{ user.username }}">
         </div>
         <div>
-            <h1 class="profile-name">{{ user.username.capitalize() }}</h1>
+            {% if user.display_name %}
+                <h1 class="profile-name">{{ user.display_name }}</h1>
+                <p class="profile-username">@{{ user.username }}</p>
+            {% else %}
+                <h1 class="profile-name">{{ user.username | capitalize }}</h1>
+                <p class="profile-username">@{{ user.username }}</p>
+            {% endif %}
             {% if beloved_books %}
                 <p class="profile-favorite">current favorite: {{ beloved_books[0].title }} by {{ beloved_books[0].author }}</p>
             {% else %}
@@ -23,6 +24,7 @@
         </div>
         {% if is_own_profile %}
         <div class="profile-actions">
+            <a href="{{ url_for('edit_profile') }}" class="add-book-link">edit profile</a>
             <a href="{{ url_for('home') }}" class="add-book-link">+ add book</a>
         </div>
         {% endif %}
