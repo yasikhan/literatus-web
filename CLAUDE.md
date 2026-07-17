@@ -21,6 +21,7 @@ flask db upgrade                       # Apply migrations
 - `DATABASE_URL` — connection string (defaults to `sqlite:///literatus.db`; production uses PostgreSQL)
 - `SECRET_KEY` — Flask secret key (auto-generated if missing)
 - `GOOGLE_BOOKS_API_KEY` — optional, enhances Google Books search
+- `GA_MEASUREMENT_ID` — optional, Google Analytics measurement ID; the gtag snippet in `layout.html` only renders when set (keeps dev traffic untracked)
 
 The app auto-converts `postgres://` URIs to `postgresql://` for SQLAlchemy compatibility.
 

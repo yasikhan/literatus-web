@@ -61,6 +61,11 @@ db = SQLAlchemy(app)
 csrf = CSRFProtect(app)
 migrate = Migrate(app, db)
 
+
+@app.context_processor
+def inject_analytics():
+    return {'ga_measurement_id': os.environ.get('GA_MEASUREMENT_ID')}
+
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 login_manager.login_message = 'log in to continue'
